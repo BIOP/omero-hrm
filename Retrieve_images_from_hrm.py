@@ -1,6 +1,6 @@
 """
- MIF/Upload_images_from_HRM.py
- Upload images to OMERO from HRM-SHare folder
+ MIF/Retrieve_images_from_HRM.py
+ Retrieve images from HRM-Share folder to OMERO with parameters and log file.
 -----------------------------------------------------------------------------
   Copyright (C) 2023
   This program is free software; you can redistribute it and/or modify
@@ -634,7 +634,7 @@ def listImagesToUpload(conn, owner, root):
                     if not dataset == None:
                         for image_name in os.listdir(dataset_folder):
                             # filter only ids images
-                            if ".dv" in image_name: # .ids
+                            if ".ids" in image_name: # .ids
                                 already_existing_image = False
                                 n_initial_images += 1
                                 
@@ -651,7 +651,7 @@ def listImagesToUpload(conn, owner, root):
                     datasetCreated = False
                     for image_name in os.listdir(dataset_folder):
                         # filter only ids images
-                        if ".dv" in image_name: # .ids
+                        if ".ids" in image_name: # .ids
                             n_initial_images += 1
                             # create a new for orphaned images 
                             if not datasetCreated:

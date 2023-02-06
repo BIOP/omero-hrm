@@ -1,6 +1,6 @@
 """
- MIF/Download_image_to_HRM.py
- Download all images in the specified containers (project, dataset, images) and save them in HRM-Share user folder
+ MIF/Send_images_to_HRM.py
+ Send all images in the specified containers (project, dataset, images) and save them in HRM-Share user folder
 -----------------------------------------------------------------------------
   Copyright (C) 2023
   This program is free software; you can redistribute it and/or modify

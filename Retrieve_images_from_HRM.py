@@ -20,12 +20,15 @@ Created by Rémy Dornier, based on the work of Niko Ehrenfeuchter from IMCF, Bas
 
 import os
 import re
+
+import omero
 from bs4 import BeautifulSoup
 import omero.scripts as scripts
 import omero.model as model
 from omero.gateway import BlitzGateway
 from omero.gateway import DatasetWrapper
 from omero.gateway import MapAnnotationWrapper
+from omero.gateway import TagAnnotationWrapper
 from omero.rtypes import rstring
 from omero.plugins.sessions import SessionsControl
 from omero.cli import CLI
@@ -39,7 +42,7 @@ ImportControl = import_module("omero.plugins.import").ImportControl
 
 # ********************* All the following methods are taken from https://github.com/imcf/hrm-omero ****************
 
-def to_omero(conn, cli, host, port, omero_id, image_file, omero_logfile="", _fetch_zip_only=False):
+def to_omero(conn, cli, host, port, dataset_id, image_file, omero_logfile="", _fetch_zip_only=False):
     """Upload an image into a specific dataset in OMERO.
     In case we know from the suffix that a given  format is not supported by OMERO, the
     upload will not be initiated at all (e.g. for SVI-HDF5, having the suffix '.h5').
@@ -51,7 +54,7 @@ def to_omero(conn, cli, host, port, omero_id, image_file, omero_logfile="", _fet
     ----------
     conn : omero.gateway.BlitzGateway
         The OMERO connection object.
-    omero_id : hrm_omero.misc.OmeroId
+    dataset_id : hrm_omero.misc.OmeroId
         The ID of the target dataset in OMERO.
     image_file : str
         The local image file including the full path.
@@ -81,7 +84,7 @@ def to_omero(conn, cli, host, port, omero_id, image_file, omero_logfile="", _fet
     #    print(msg)
     #   raise TypeError(msg)
 
-    if omero_id.obj_type != "Dataset":
+    if dataset_id.obj_type != "Dataset":
         msg = "Currently only the upload to 'Dataset' objects is supported!"
         print(msg)
         raise ValueError(msg)
@@ -123,7 +126,7 @@ def to_omero(conn, cli, host, port, omero_id, image_file, omero_logfile="", _fet
         import_args.extend(["--debug", "ALL"])
         import_args.extend(["--errs", omero_logfile])
 
-    import_args.extend(["-d", omero_id.obj_id])
+    import_args.extend(["-d", dataset_id.obj_id])
 
     # capture stdout and request YAML format to parse the output later on:
     tempdir = tempfile.TemporaryDirectory(prefix="hrm-omero__")
@@ -145,6 +148,7 @@ def to_omero(conn, cli, host, port, omero_id, image_file, omero_logfile="", _fet
     try:
         cli.invoke(import_args, strict=True)
         cli.get_client().closeSession()  # force killing the session
+        cli.close() # see if it doesn't crash
         imported_id = extract_image_id(cap_stdout)
         print("SUCCESS", f"Imported OMERO image ID: {imported_id}")
     except PermissionError as err:
@@ -160,21 +164,28 @@ def to_omero(conn, cli, host, port, omero_id, image_file, omero_logfile="", _fet
               )
         return False, -1
     except Exception as err:  # pylint: disable-msg=broad-except
-        print("ERROR", f"ERROR: uploading '{image_file}' to {omero_id} failed!")
+        print("ERROR", f"ERROR: uploading '{image_file}' to {dataset_id} failed!")
         print("ERROR", f"OMERO error message: >>>{err}<<<")
         print("WARNING", f"import_args: {import_args}")
         return False, -1
     finally:
         tempdir.cleanup()
 
-    target_id = OmeroId(f"G:{omero_id.group}:Image:{imported_id}")  # modify from Niko's job
+    target_id = OmeroId(f"G:{dataset_id.group}:Image:{imported_id}")  # modify from Niko's job
 
     # add deconvolution parameters as key-value pairs
     try:
         summary = parse_summary(image_file)
-        add_annotation_keyvalue(conn, target_id, summary)
+        add_annotation_key_value(conn, target_id, summary)
     except Exception as err:  # pragma: no cover # pylint: disable-msg=broad-except
         print("ERROR", f"Creating a parameter summary from [{image_file}] failed: {err}")
+        return False, -1
+
+    # transfer tag from raw to deconvolved image
+    try:
+        add_tags(conn, target_id, dataset_id)
+    except Exception as err:
+        print("ERROR", f"Adding tags from raw image to image [{target_id}] failed: {err}")
         return False, -1
 
     # attach the log file to the image
@@ -255,7 +266,7 @@ def extract_image_id(fname):
     return image_id
 
 
-def add_annotation_keyvalue(conn, omero_id, annotation):
+def add_annotation_key_value(conn, omero_id, annotation):
     """Add a key-value "map" annotation to an OMERO object.
     Parameters
     ----------
@@ -295,6 +306,105 @@ def add_annotation_keyvalue(conn, omero_id, annotation):
     print("SUCCESS", f"Added annotation to {omero_id}.")
 
     return True
+
+
+def add_tags(conn, omero_id, dataset_id):
+    """Add a key-value "map" annotation to an OMERO object.
+    Parameters
+    ----------
+    conn : omero.gateway.BlitzGateway
+        The OMERO connection object.
+    omero_id : hrm_omero.misc.OmeroId
+        The ID of the OMERO object that should receive the annotation.
+    dataset_id: Long
+        The ID of the target dataset
+    Returns
+    -------
+    bool
+        True in case of success, False otherwise.
+    Raises
+    ------
+    RuntimeError
+        Raised in case re-establishing the OMERO connection fails.
+    """
+    print("TRACE", f"Adding a tags to {omero_id}")
+
+    target_obj = conn.getObject(omero_id.obj_type, omero_id.obj_id)
+    print(target_obj)
+    if target_obj is None:
+        print("ERROR", f"Unable to identify target object {omero_id} in OMERO!")
+        return False
+
+    deconvolved_img_name = target_obj.getName()
+    dataset_obj = conn.getObject(dataset_id.obj_type, dataset_id.obj_id)
+    img_base_name = parse_image_basename(deconvolved_img_name)
+    raw_img_obj = None
+    print(f"Image base name :  {img_base_name}")
+    # get the raw image
+    for dataset_image_obj in dataset_obj.listChildren():
+        if (img_base_name in dataset_image_obj.getName()) and (not (dataset_image_obj.getName() == deconvolved_img_name)):
+            raw_img_obj = dataset_image_obj
+            break
+
+    if raw_img_obj is not None:
+        # get all tags from the raw image
+        raw_img_tag_obj_list = []
+
+        for ann in raw_img_obj.listAnnotations():
+            print(ann.getId(), ann.OMERO_TYPE)
+            print(" added by ", ann.link.getDetails().getOwner().getOmeName())
+            if ann.OMERO_TYPE == omero.gateway.TagAnnotationI:
+                print("Tag value:", ann.getTextValue())
+                raw_img_tag_obj_list.append(ann)
+
+        print(f"obj_id : {raw_img_obj.getId()}")
+        # transfer tag from raw image to deconvolved image
+        raw_tag_value = "raw"
+        for raw_img_tag_obj in raw_img_tag_obj_list:
+            print(f"raw image tags : {raw_img_tag_obj}")
+            if not raw_img_tag_obj.getName() == raw_tag_value:
+                target_obj.linkAnnotation(raw_img_tag_obj)
+
+        # create raw tags
+        tag_list = [raw_tag_value]
+        check_existence_and_add_tag_objs(conn, tag_list, raw_img_obj, raw_img_tag_obj_list)
+
+    # create deconvolved tags
+    deconvolved_tag_value = "deconvolved"
+    tag_list = [deconvolved_tag_value]
+    check_existence_and_add_tag_objs(conn, tag_list, target_obj)
+
+    return True
+
+
+def check_existence_and_add_tag_objs(conn, tag_value_list, target_obj, reference_tag_obj_list=None):
+    if reference_tag_obj_list is None:
+        reference_tag_obj_list = []
+    group_tag_obj_list = conn.getObjects('TagAnnotation')
+    print(f"tag value list {tag_value_list}")
+    for tag_value in tag_value_list:
+        new_tag_obj = None
+        for group_tag_obj in group_tag_obj_list:
+            if tag_value.lower() == group_tag_obj.getTextValue().lower():
+                new_tag_obj = group_tag_obj
+                break
+        print(f"new tag object after looping {new_tag_obj}")
+        if new_tag_obj is None:
+            new_tag_obj = TagAnnotationWrapper(conn)
+            new_tag_obj.setValue(tag_value)
+            new_tag_obj.save()
+
+        to_link = True
+        for reference_tag_obj in reference_tag_obj_list:
+            print(f"reference tag obj {reference_tag_obj}")
+            print(f"reference tag obj get name  {reference_tag_obj.getName()}")
+            print(f"new_tag_obj {new_tag_obj}")
+            print(f"new_tag_obj get name  {new_tag_obj.getName()}")
+            if reference_tag_obj.getTextValue().lower == new_tag_obj.getTextValue().lower():
+                to_link = False
+                break
+        if to_link:
+            target_obj.linkAnnotation(new_tag_obj)
 
 
 def parse_summary(fname):
@@ -449,6 +559,37 @@ def parse_job_basename(fname):
     return basename
 
 
+def parse_image_basename(fname):
+    """Parse the basename from an HRM job result file name.
+    HRM job IDs are generated via PHP's `uniqid()` call that is giving a 13-digit
+    hexadecimal string (8 digits UNIX time and 5 digits microsconds). The HRM labels its
+    result files by appending an underscore (`_`) followed by this ID and an `_hrm`
+    suffix. This function tries to match this section and remove everything *after* it
+    from the name.
+    Its intention is to safely remove the suffix from an image file name while taking no
+    assumptions about how the suffix looks like (could e.g. be `.ics`, `.ome.tif` or
+    similar).
+    Parameters
+    ----------
+    fname : str
+        The input string, usually the name of an HRM result file (but any string is
+        accepted).
+    Returns
+    -------
+    str
+        The input string (`fname`) where everything *after* an HRM-like job label (e.g.
+        `_abcdef0123456_hrm` or `_f435a27b9c85e_hrm`) is removed. In case the input
+        string does *not* contain a matching section it is returned
+    """
+    print("TRACE", fname)
+    hrm_name = re.search(r"(_[0-9a-f]{13}_hrm)\..*",  fname)
+    print("TRACE", hrm_name)
+    basename = fname.replace(hrm_name.group(0),"")
+    print("TRACE", basename)
+
+    return basename
+
+
 class OmeroId:
     """Representation of a (group-qualified) OMERO object ID.
     The purpose of this class is to facilitate parsing and access of the
@@ -585,13 +726,16 @@ def list_images_to_upload(conn, owner, root):
     image_path_dataset_id_map : dict
         dictionnary {image_path:dataset_id} of all images to upload, excluding those that already exists on OMERO.
     path : str
-        path that raise an error because the last folder does not exists
+        path that raise an error because the last folder does not exist
     n_initial_images : int  
         Nomber of images in Deconvolution/omero folder
     """
     image_path_dataset_id_map = {}
     n_initial_images = 0
 
+    print(root)
+    print(os.path.exists(root))
+    print(os.path.isdir(root))
     if os.path.isdir(root):
         owner_folder = os.path.join(root, owner)
         if not os.path.isdir(owner_folder):
@@ -601,16 +745,19 @@ def list_images_to_upload(conn, owner, root):
             return None, owner_folder, n_initial_images
 
         deconvolved_folder = os.path.join(owner_folder, "Deconvolved")
+        print(deconvolved_folder)
         if not os.path.isdir(deconvolved_folder):
             return None, deconvolved_folder, n_initial_images
 
         omero_folder = os.path.join(deconvolved_folder, "omero")
+        print(omero_folder)
         if not os.path.isdir(omero_folder):
             return None, omero_folder, n_initial_images
 
         # list projects
         for project_name in os.listdir(omero_folder):
             project_folder = os.path.join(omero_folder, project_name)
+            print("project folder : "+project_folder)
 
             if not os.path.isdir(project_folder):
                 return None, project_folder, n_initial_images
@@ -618,11 +765,13 @@ def list_images_to_upload(conn, owner, root):
                 # list datasets
             for dataset_name in os.listdir(project_folder):
                 dataset_folder = os.path.join(project_folder, dataset_name)
+                print("dataset folder : " + dataset_folder)
 
                 if not os.path.isdir(dataset_folder):
                     return None, dataset_folder, n_initial_images
 
-                    # images within a dsataset
+                print("dataset name : " + dataset_name)
+                # images within a dsataset
                 if not dataset_name == "None":
                     d_name_split = dataset_name.split("_")
                     dataset_id = d_name_split[0]
@@ -631,12 +780,13 @@ def list_images_to_upload(conn, owner, root):
                     if dataset is not None:
                         for image_name in os.listdir(dataset_folder):
                             # filter only ids images
-                            if ".ids" in image_name:  # .ids
+                            if ".dv" in image_name:  # .ids
                                 already_existing_image = False
                                 n_initial_images += 1
+                                dataset_images = dataset.listChildren()
 
-                                # filter image that does not already exists in omero
-                                for ex_image in dataset.listChildren():
+                                # filter image that does not already exist in omero
+                                for ex_image in dataset_images:
                                     if ex_image.getName() == image_name:
                                         already_existing_image = True
                                         break
@@ -646,9 +796,10 @@ def list_images_to_upload(conn, owner, root):
                 # orphaned images
                 else:
                     dataset_created = False
+                    orphaned_dataset_id = -1
                     for image_name in os.listdir(dataset_folder):
                         # filter only ids images
-                        if ".ids" in image_name:  # .ids
+                        if ".dv" in image_name:  # .ids
                             n_initial_images += 1
                             # create a new for orphaned images 
                             if not dataset_created:
@@ -700,7 +851,7 @@ def upload_images_from_hrm(conn, script_params):
     delete_uploaded_images = script_params["Delete_data_on_HRM"]
 
     # root path to HRM-Share folder
-    root = "/mnt/hrmshare"
+    root= "/mnt/hrmshare"
     # current logged in user
     owner = conn.getUser().getOmeName()
     # current group ID
@@ -736,7 +887,10 @@ def upload_images_from_hrm(conn, script_params):
         message = f"{total_images_uploaded} / {n_initial_images} images uploaded with key-values and {n_existing_images} / {n_initial_images} images already existing."
 
     else:
-        message = f"The path {path} is not valid. Cannot upload any images."
+        if n_initial_images == 0:
+            message = f"There is no image to upload"
+        else:
+            message = f"The path {path} is not valid. Cannot upload any images."
 
     return message
 
@@ -749,7 +903,7 @@ def run_script():
         """,
         scripts.String(
             "OMERO_server", optional=False, grouping="1",
-            description="OMERO server address", default="omero-server.epfl.ch"),
+            description="OMERO server address", default="omero-poc.epfl.ch"),
 
         scripts.Int(
             "port", optional=False, grouping="2",

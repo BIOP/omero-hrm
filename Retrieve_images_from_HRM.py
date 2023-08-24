@@ -754,7 +754,7 @@ def run_script():
         """,
         scripts.String(
             "OMERO_server", optional=False, grouping="1",
-            description="OMERO server adresse", default="omero-poc.epfl.ch"),
+            description="OMERO server address", default="omero-server.epfl.ch"),
         
          scripts.Int(
             "port", optional=False, grouping="2",

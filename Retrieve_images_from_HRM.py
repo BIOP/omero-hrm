@@ -37,8 +37,6 @@ from datetime import date
 import yaml
 from importlib import import_module
 
-from omero_model_ImageI import ImageI
-
 ImportControl = import_module("omero.plugins.import").ImportControl
 
 
@@ -46,6 +44,7 @@ ImportControl = import_module("omero.plugins.import").ImportControl
 SERVER_PARAM_NAME = "OMERO_server"
 PORT_PARAM_NAME = "Port"
 DELETE_DECONVOLVED_PARAM_NAME = "Delete_deconvolved_images_on_HRM"
+DELETE_RAW_PARAM_NAME = "Delete_raw_images_on_HRM"
 
 # ********************* All the following methods are taken from https://github.com/imcf/hrm-omero ****************
 
@@ -809,7 +808,7 @@ def list_images_to_upload(conn, owner, root):
 
 
 def delete_uploaded_files(image_path):
-    """Delete image
+    """Delete image in the deconvolved folder
     ----------
     image_path : str
         Path to image to delete.
@@ -834,6 +833,54 @@ def delete_uploaded_files(image_path):
             print("INFO", f"Delete file [{file}]")
             os.remove(file)
 
+    if len(os.listdir(parent_folder)) == 0:
+        parent_parent_folder = os.path.abspath(os.path.join(parent_folder, os.pardir))
+        print("INFO", f"Delete parent directory [{parent_folder}]")
+        os.rmdir(parent_folder)
+        if len(os.listdir(parent_parent_folder)) == 0:
+            print("INFO", f"Delete parent directory [{parent_parent_folder}]")
+            os.rmdir(parent_parent_folder)
+
+
+def delete_raw_files(image_path):
+    """Delete image
+    ----------
+    image_path : str
+        Path to image to delete.
+    Returns
+    -------
+    bool
+        True in case of success, False otherwise.
+    """
+    # file name with extension
+    image_name = os.path.basename(image_path)
+
+    # file name without extension
+    raw_image_name_without_ext = parse_image_basename(image_name)
+
+    # parent file
+    parent_folder = os.path.abspath(os.path.join(image_path, os.pardir))
+    parent_folder = parent_folder.replace("Deconvolved", "Raw")
+
+    if os.path.exists(parent_folder):
+
+        for path in os.listdir(parent_folder):
+            # check if current path is a file
+            file = os.path.join(parent_folder, path)
+            if os.path.isfile(file) and (raw_image_name_without_ext in file):
+                print("INFO", f"Delete file [{file}]")
+                os.remove(file)
+
+        if len(os.listdir(parent_folder)) == 0:
+            parent_parent_folder = os.path.abspath(os.path.join(parent_folder, os.pardir))
+            print("INFO", f"Delete parent directory [{parent_folder}]")
+            os.rmdir(parent_folder)
+            if len(os.listdir(parent_parent_folder)) == 0:
+                print("INFO", f"Delete parent directory [{parent_parent_folder}]")
+                os.rmdir(parent_parent_folder)
+    else:
+        print("WARN", f"The path{parent_folder} does not exist ; raw images are not deleted")
+
 
 def upload_images_from_hrm(conn, script_params):
     """Upload images from HRM-SHare folder
@@ -855,6 +902,8 @@ def upload_images_from_hrm(conn, script_params):
     port = script_params[PORT_PARAM_NAME]
     # remove existing images
     delete_uploaded_images = script_params[DELETE_DECONVOLVED_PARAM_NAME]
+    # remove existing images
+    delete_raw_images = script_params[DELETE_RAW_PARAM_NAME]
 
     # root path to HRM-Share folder
     root = "/mnt/hrmshare"
@@ -910,9 +959,11 @@ def upload_images_from_hrm(conn, script_params):
                     print("ERROR", f"Fail attaching log file from [{image_path}] to image {image_id_obj.obj_id} : {err}")
                     has_failed = True
 
-                if delete_uploaded_images and image_id_obj is not None and not has_failed:
-                    delete_uploaded_files(image_path)
-
+                if image_id_obj is not None and not has_failed:
+                    if delete_uploaded_images:
+                        delete_uploaded_files(image_path)
+                    if delete_raw_images:
+                        delete_raw_files(image_path)
         finally:
             cli.close()
 
@@ -947,8 +998,12 @@ def run_script():
             description="OMERO port", default=4064),
 
         scripts.Bool(
-            DELETE_DECONVOLVED_PARAM_NAME, optional=False, grouping="3",
+            DELETE_DECONVOLVED_PARAM_NAME, optional=True, grouping="3",
             description="Remove uploaded images from HRM folder", default=False),
+
+        scripts.Bool(
+            DELETE_RAW_PARAM_NAME, optional=True, grouping="4",
+            description="Remove corresponding raw images from HRM folder", default=False),
 
         authors=["Rémy Dornier"],
         institutions=["EPFL - BIOP"],

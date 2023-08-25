@@ -338,6 +338,10 @@ def add_tags(conn, target_img_id_obj, dataset_id_obj):
             raw_img_obj = dataset_image_obj
             break
 
+    raw_tag_value = "raw"
+    deconvolved_tag_value = "deconvolved"
+    hrm_tag_value = "hrm"
+
     if raw_img_obj is not None:
         # get all tags from the raw image
         raw_img_tag_obj_list = []
@@ -348,7 +352,6 @@ def add_tags(conn, target_img_id_obj, dataset_id_obj):
                 raw_img_tag_obj_list.append(ann)
 
         # transfer tags from raw image to deconvolved image
-        raw_tag_value = "raw"
         raw_img_tag_value_list = []
         for raw_img_tag_obj in raw_img_tag_obj_list:
             # remove the tag "raw" that should be specific to raw images
@@ -358,14 +361,13 @@ def add_tags(conn, target_img_id_obj, dataset_id_obj):
         print("INFO", f"Transfer the following tags from raw to deconvolved image : {raw_img_tag_value_list}")
 
         # create raw tag
-        print("INFO", f"Adding the following tag to the raw image : {raw_tag_value}")
-        tag_list = [raw_tag_value]
+        tag_list = [raw_tag_value, hrm_tag_value]
+        print("INFO", f"Adding the following tag to the raw image : {tag_list}")
         check_existence_and_add_tag_objs(conn, tag_list, raw_img_obj, raw_img_tag_obj_list)
 
     # create deconvolved tag
-    deconvolved_tag_value = "deconvolved"
-    print("INFO", f"Adding the following tag to the deconvolved image : {deconvolved_tag_value}")
-    tag_list = [deconvolved_tag_value]
+    tag_list = [deconvolved_tag_value, hrm_tag_value]
+    print("INFO", f"Adding the following tag to the deconvolved image : {tag_list}")
     check_existence_and_add_tag_objs(conn, tag_list, target_img_obj)
 
     return True

@@ -172,13 +172,13 @@ def download_images_for_hrm(conn, script_params):
     n_project = 0
     user_name = ""
 
-    # check if the root directory exists ==> necessary because svraw1 server is mounted on OMERO server
+    # check if the root directory exists ==> necessary because sv-nas1 server is mounted on OMERO server
     if os.path.isdir(root):
         user_name = conn.getUser().getOmeName()
-        ower_root = os.path.join(root, user_name)
+        owner_root = os.path.join(root, user_name)
 
-        # check if the user has an HRM account (a folder with his/her name should already exists)
-        if os.path.isdir(ower_root) or conn.getUser().isAdmin():
+        # check if the user has an HRM account (a folder with his/her name should already exist)
+        if os.path.isdir(owner_root) or conn.getUser().isAdmin():
             for object_id in object_id_list:
 
                 # search in all the user's group
@@ -206,7 +206,7 @@ def download_images_for_hrm(conn, script_params):
 
                     # select object type and add owner as key-value pair
                     if object_type == 'Image':
-                        n_image += process_image(conn, omero_object, ower_root, download_existing_images)
+                        n_image += process_image(conn, omero_object, owner_root, download_existing_images)
 
                     if object_type == 'Dataset':
                         project = omero_object.getParent()
@@ -214,14 +214,14 @@ def download_images_for_hrm(conn, script_params):
                             project_name = "None"
                         else:
                             project_name = "{}_{}".format(project.getId(), project.getName())
-                        n_image_tmp, n_dataset_tmp = process_dataset(conn, omero_object, project_name, ower_root,
+                        n_image_tmp, n_dataset_tmp = process_dataset(conn, omero_object, project_name, owner_root,
                                                                      download_existing_images)
                         n_dataset += n_dataset_tmp
                         n_image += n_image_tmp
 
                     if object_type == 'Project':
-                        n_image_tmp, n_dataset_tmp, n_project_tmp = process_project(conn, omero_object, ower_root,
-                                                                                  download_existing_images)
+                        n_image_tmp, n_dataset_tmp, n_project_tmp = process_project(conn, omero_object, owner_root,
+                                                                                    download_existing_images)
                         n_image += n_image_tmp
                         n_dataset += n_dataset_tmp
                         n_project += n_project_tmp

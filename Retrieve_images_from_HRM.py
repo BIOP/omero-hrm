@@ -40,7 +40,6 @@ from importlib import import_module
 ImportControl = import_module("omero.plugins.import").ImportControl
 
 
-
 SERVER_PARAM_NAME = "OMERO_server"
 PORT_PARAM_NAME = "Port"
 DELETE_DECONVOLVED_PARAM_NAME = "Delete_deconvolved_images_on_HRM"
@@ -777,7 +776,7 @@ def list_images_to_upload(conn, owner, root):
                     if dataset is not None:
                         for image_name in os.listdir(dataset_folder):
                             # filter only ids images
-                            if ".dv" in image_name:  # .ids
+                            if "ids" in image_name:  # .ids
                                 already_existing_image = False
                                 n_initial_images += 1
                                 dataset_images = dataset.listChildren()
@@ -796,7 +795,7 @@ def list_images_to_upload(conn, owner, root):
                     orphaned_dataset_id = -1
                     for image_name in os.listdir(dataset_folder):
                         # filter only ids images
-                        if ".dv" in image_name:  # .ids
+                        if ".ids" in image_name:  # .ids
                             n_initial_images += 1
                             # create a new for orphaned images 
                             if not dataset_created:
@@ -973,7 +972,7 @@ def upload_images_from_hrm(conn, script_params):
         message = f"{total_images_uploaded} / {n_initial_images} images uploaded and" \
                   f" {n_existing_images} / {n_initial_images} images already existing --  " \
                   f"{total_kvps_uploaded} / {n_initial_images} images have KVP added -- " \
-                  f"{total_tags_uploaded} / {n_initial_images} images have tags transfered -- " \
+                  f"{total_tags_uploaded} / {n_initial_images} images have tags transferred -- " \
                   f"{total_files_uploaded} / {n_initial_images} images have files added"
 
     else:
@@ -993,7 +992,7 @@ def run_script():
         """,
         scripts.String(
             SERVER_PARAM_NAME, optional=False, grouping="1",
-            description="OMERO server address", default="omero-poc.epfl.ch"),
+            description="OMERO server address", default="omero-server.epfl.ch"),
 
         scripts.Int(
             PORT_PARAM_NAME, optional=False, grouping="2",

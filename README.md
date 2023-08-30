@@ -3,6 +3,7 @@
 These scripts aim at making the connection between OMERO and HRM more friendly.
 Our HRM server works with a shared folder located on another server (HRM-Share folder).
 Scripts are uploaded to OMERO.server and can be run from the web interface. 
+Documentation is available on our [wiki page](https://wiki-biop.epfl.ch/en/data-management/omero/hrm)
 
 ## Send image to HRM
 

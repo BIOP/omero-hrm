@@ -988,7 +988,10 @@ def run_script():
     client = scripts.client(
         'Retrieve images from HRM-Share folder',
         """
-    This script retrieves .ids images from your HRM folder (\\sv-nas1.rcp.epfl.ch\ptbiop\public\HRM-Share\Deconvolved\omero) and uploads them on OMERO. It also parses the .parameter.txt file to add all parameters as key-values. Please clean this folder to be sure that it only contains images you want to upload.
+    This script retrieves .ids images from your HRM folder (\\sv-nas1.rcp.epfl.ch\ptbiop\public\HRM-Share\Deconvolved\omero) and uploads them on OMERO. 
+    It also parses the .parameter.txt file to add all parameters as key-values. 
+    Please clean this folder to be sure that it only contains images you want to upload.
+    If an image has already been uploaded on OMERO (i.e. identical name and project/dataset location), it is skipped to not upload it twice.
         """,
         scripts.String(
             SERVER_PARAM_NAME, optional=False, grouping="1",

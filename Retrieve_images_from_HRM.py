@@ -755,6 +755,10 @@ def list_images_to_upload(conn, owner, root):
 
         # list projects
         for project_name in os.listdir(omero_folder):
+            # filter any .DS_store, .git and Thumbs.db
+            if project_name.startswith(".") or project_name.endswith("Thumbs.db"):
+                continue
+
             project_folder = os.path.join(omero_folder, project_name)
 
             if not os.path.isdir(project_folder):
@@ -762,6 +766,11 @@ def list_images_to_upload(conn, owner, root):
 
                 # list datasets
             for dataset_name in os.listdir(project_folder):
+
+                # filter any .DS_store, .git and Thumbs.db
+                if dataset_name.startswith(".") or dataset_name.endswith("Thumbs.db"):
+                    continue
+
                 dataset_folder = os.path.join(project_folder, dataset_name)
 
                 if not os.path.isdir(dataset_folder):
@@ -776,7 +785,7 @@ def list_images_to_upload(conn, owner, root):
                     if dataset is not None:
                         for image_name in os.listdir(dataset_folder):
                             # filter only ids images
-                            if "ids" in image_name:  # .ids
+                            if ".ids" in image_name:  # .ids
                                 already_existing_image = False
                                 n_initial_images += 1
                                 dataset_images = dataset.listChildren()

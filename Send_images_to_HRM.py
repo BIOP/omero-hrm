@@ -21,6 +21,7 @@ Created by Rémy Dornier
 from omero.gateway import BlitzGateway
 import omero.scripts as scripts
 import os
+import sys
 from omero.rtypes import rstring
 from omero_model_OriginalFileI import OriginalFileI
 
@@ -28,6 +29,17 @@ from omero_model_OriginalFileI import OriginalFileI
 DATA_TYPE_PARAM_NAME = "Data_Type"
 OVERWRITE_PARAM_NAME = "Overwrite_images_on_HRM"
 ID_PARAM_NAME = "IDs"
+
+
+class StdOutHandle():
+    """
+    File handle for writing bytes to std.out
+    """
+    # https://github.com/pexpect/pexpect/pull/31/files
+    @staticmethod
+    def write(b):
+        # Handle stdout.write for bytes
+        return sys.stdout.write(b.decode('ascii', 'replace'))
 
 
 def download_image(conn, target_obj, path, download_existing_images):
@@ -42,26 +54,35 @@ def download_image(conn, target_obj, path, download_existing_images):
         print("ERROR", f"ERROR: no original file(s) for [{target_obj.getId()}] found!")
         return False
 
-    downloads = []
-    # assemble a list of items to download
-    for fset_file in fset.listFiles():
-        file_name = fset_file.getName()
-        file_path = fset_file.getPath()
+    # mimic the Java gateway download by adding a fileset folder
+    path = os.path.join(path, "Fileset_"+str(fset.getId()))
 
-        if download_existing_images or not os.path.exists(os.path.join(path, file_name)):
-            downloads.append((fset_file.getId(), os.path.join(path, file_name)))
-        else:
-            print(f"INFO: {file_name} already exists in {path}")
+    # loop over the files within fileset and resolve its hierarchy
+    template_prefix = fset.getTemplatePrefix()
+    for orig_file in fset.listFiles():
+        file_path = orig_file.getPath().replace(template_prefix, "")
+        file_name = orig_file.getName()
+        file_id = orig_file.getId()
 
-    # now initiate the downloads for all original files:
-    for (file_id, tgt) in downloads:
+        target_dir = os.path.join(path, file_path)
+        os.makedirs(target_dir, exist_ok=True)
+        target_path = os.path.join(target_dir, file_name)
+
+        # download the file
         try:
-            print(f"Downloading original file [{file_id}] to [{tgt}]...")
-            conn.c.download(OriginalFileI(file_id), tgt)
+            if target_path == "-":
+                conn.c.download(orig_file, filehandle=StdOutHandle())
+            else:
+                if os.path.exists(target_path) and not download_existing_images:
+                    print(f"File exists! Skipping...")
+                else:
+                    print(f"Downloading original file [{file_id}] to [{target_path}]...")
+                    conn.c.download(OriginalFileI(file_id), target_path)
         except Exception as err:  # pylint: disable-msg=broad-except
-            print("ERROR", f"ERROR: downloading {file_id} to '{tgt}' failed: {err}")
+            print("ERROR", f"ERROR: downloading {file_id} to '{target_path}' failed: {err}")
             return False
-        print("SUCCESS", f"ID {file_id} downloaded as '{os.path.basename(tgt)}'")
+        print("SUCCESS", f"ID {file_id} downloaded as '{os.path.basename(target_path)}'")
+
     return True
 
 

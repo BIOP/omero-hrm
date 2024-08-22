@@ -97,7 +97,7 @@ def download_image(conn, target_obj, path, download_existing_images):
 
 def build_path(root, project_name, dataset_name):
     """
-    Build an omero-like and HRM compatible path (Raw/omero/project/dataset/image)
+    Build an omero-like and HRM compatible path (Raw/omero/project/dataset)
     return the path
     """
     if os.path.exists(root) and os.path.isdir(root):

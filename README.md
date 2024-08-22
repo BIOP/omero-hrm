@@ -7,8 +7,8 @@ Documentation is available on our [wiki page](https://wiki-biop.epfl.ch/en/data-
 
 ## Send image to HRM
 
-The first script sends images from OMERO to HRM-Share folder. You can select image(s), dataset(s) or project(s) ids and all images are sent to the shared folder, 
-with the same dataset/project hierarchy.
+The first script sends images from OMERO to HRM-Share folder. You can select image(s), dataset(s) or project(s) IDs and all images are sent to the shared folder, 
+with the following hierarchy : `Raw / omero / projectID_projectName / datasetID_datasetName / Fileset_ID.`
 
 ## Retrieve image from HRM
 

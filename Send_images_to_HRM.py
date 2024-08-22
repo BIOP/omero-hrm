@@ -29,6 +29,7 @@ from omero_model_OriginalFileI import OriginalFileI
 DATA_TYPE_PARAM_NAME = "Data_Type"
 OVERWRITE_PARAM_NAME = "Overwrite_images_on_HRM"
 ID_PARAM_NAME = "IDs"
+downloaded_fileset = []
 
 
 class StdOutHandle():
@@ -46,6 +47,9 @@ def download_image(conn, target_obj, path, download_existing_images):
     """
     Download an image to the given path
     return downloading status
+
+    Method partially taken from https://github.com/imcf/hrm-omero
+    and https://github.com/ome/omero-py/blob/master/src/omero/plugins/download.py
     """
     # Download the files composing the image
     fset = target_obj.getFileset()
@@ -53,6 +57,10 @@ def download_image(conn, target_obj, path, download_existing_images):
     if not fset:
         print("ERROR", f"ERROR: no original file(s) for [{target_obj.getId()}] found!")
         return False
+
+    if fset.getId() in downloaded_fileset:
+        print(f"Image part of the same fileset "+str(fset.getId())+"! Skipping...")
+        return True
 
     # mimic the Java gateway download by adding a fileset folder
     path = os.path.join(path, "Fileset_"+str(fset.getId()))
@@ -78,6 +86,7 @@ def download_image(conn, target_obj, path, download_existing_images):
                 else:
                     print(f"Downloading original file [{file_id}] to [{target_path}]...")
                     conn.c.download(OriginalFileI(file_id), target_path)
+                    downloaded_fileset.append(fset.getId())
         except Exception as err:  # pylint: disable-msg=broad-except
             print("ERROR", f"ERROR: downloading {file_id} to '{target_path}' failed: {err}")
             return False
@@ -221,7 +230,7 @@ def download_images_for_hrm(conn, script_params):
                 '''
 
                 # check if that object exists
-                if not omero_object is None:
+                if omero_object is not None:
                     # set the correct group Id
                     conn.SERVICE_OPTS.setOmeroGroup(omero_object.getDetails().getGroup().getId())
 
@@ -279,7 +288,7 @@ def run_script():
     client = scripts.client(
         'Send images to HRM deconvolution server',
         """
-    This script sends all images from the selected source(s) to your HRM folder (\\sv-nas1.rcp.epfl.ch\ptbiop-raw\public\HRM-Share).
+    This script sends all images from the selected source(s) to your HRM folder (\\sv-nas1.rcp.epfl.ch\ptbiop-raw\HRM-Share).
         """,
         scripts.String(
             DATA_TYPE_PARAM_NAME, optional=False, grouping="1",

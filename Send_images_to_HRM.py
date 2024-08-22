@@ -216,18 +216,6 @@ def download_images_for_hrm(conn, script_params):
 
                 # get the object
                 omero_object = conn.getObject(object_type, object_id)
-                ''' # Remove Admin part because not necessary
-                if not omero_object == None:
-                    if(conn.getUser().isAdmin()):
-                        # get sudo connection
-                        user_name = omero_object.getOwner().getOmeName()
-                        user_conn = conn.suConn(user_name)
-                        user_conn.SERVICE_OPTS.setOmeroGroup('-1')
-                        omero_object = user_conn.getObject(object_type, object_id)
-                        owerRoot = os.path.join(root, user_name)
-                    else:
-                        user_conn = conn
-                '''
 
                 # check if that object exists
                 if omero_object is not None:
@@ -255,13 +243,6 @@ def download_images_for_hrm(conn, script_params):
                         n_image += n_image_tmp
                         n_dataset += n_dataset_tmp
                         n_project += n_project_tmp
-
-                    '''
-                    # close the user connection                
-                    if(conn.getUser().isAdmin()):
-                        user_conn.close()
-                    '''
-
                 else:
                     print(object_type, object_id, "does not exist or you do not have access to it")
 

@@ -839,7 +839,7 @@ def delete_uploaded_files(image_path):
     for path in os.listdir(parent_folder):
         # check if current path is a file
         file = os.path.join(parent_folder, path)
-        if os.path.isfile(file) and (image_name_without_ext in file):
+        if os.path.isfile(file) and ((image_name_without_ext in file) or (".DS_Store" in file) or ("Thumbs.db" in file)):
             print("INFO", f"Delete file [{file}]")
             os.remove(file)
 

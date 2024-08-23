@@ -32,7 +32,7 @@ ID_PARAM_NAME = "IDs"
 downloaded_fileset = []
 
 
-class StdOutHandle():
+class StdOutHandle:
     """
     File handle for writing bytes to std.out
     """
@@ -161,6 +161,7 @@ def process_dataset(conn, dataset, project_name, root, download_existing_images)
     return the number of processed images
     """
     n_image = 0
+    tot_image = 0
     dataset_name = "{}_{}".format(dataset.getId(), dataset.getName())
     path = build_path(root, project_name, dataset_name)
 
@@ -169,8 +170,9 @@ def process_dataset(conn, dataset, project_name, root, download_existing_images)
 
     for image in dataset.listChildren():
         n_image += (1 if download_image(conn, image, path, download_existing_images) else 0)
+        tot_image += 1
 
-    return n_image, (1 if n_image == dataset.countChildren() else 0)
+    return n_image, (1 if n_image == dataset.countChildren() else 0), tot_image
 
 
 def process_project(conn, project, root, download_existing_images):
@@ -180,13 +182,18 @@ def process_project(conn, project, root, download_existing_images):
     """
     n_dataset = 0
     n_image = 0
+    tot_image = 0
+    tot_dataset = 0
     project_name = "{}_{}".format(project.getId(), project.getName())
     for dataset in project.listChildren():
-        n_image_tmp, n_dataset_tmp = process_dataset(conn, dataset, project_name, root, download_existing_images)
+        n_image_tmp, n_dataset_tmp, tot_image_tmp = process_dataset(conn, dataset, project_name, root,
+                                                                    download_existing_images)
         n_dataset += n_dataset_tmp
         n_image += n_image_tmp
+        tot_image += tot_image_tmp
+        tot_dataset += 1
 
-    return n_image, n_dataset, (1 if n_dataset == project.countChildren() else 0)
+    return n_image, n_dataset, (1 if n_dataset == project.countChildren() else 0), tot_image, tot_dataset
 
 
 def download_images_for_hrm(conn, script_params):
@@ -200,14 +207,16 @@ def download_images_for_hrm(conn, script_params):
     # enter its corresponding ID (except for 'user' : enter the username)
     object_id_list = script_params[ID_PARAM_NAME]
     # root HRM path
-    root = "/mnt"#/hrmshare"  # script_params["HRM_path"]
+    root = "/mnt/hrmshare"  # script_params["HRM_path"]
     # boolean to overwrite
     download_existing_images = script_params[OVERWRITE_PARAM_NAME]
 
     n_image = 0
     n_dataset = 0
     n_project = 0
-    user_name = ""
+    tot_image = 0
+    tot_dataset = 0
+    tot_project = 0
 
     # check if the root directory exists ==> necessary because sv-nas1 server is mounted on OMERO server
     if os.path.isdir(root):
@@ -232,6 +241,7 @@ def download_images_for_hrm(conn, script_params):
                     # select object type and add owner as key-value pair
                     if object_type == 'Image':
                         n_image += process_image(conn, omero_object, owner_root, download_existing_images)
+                        tot_image += 1
 
                     if object_type == 'Dataset':
                         project = omero_object.getParent()
@@ -239,24 +249,35 @@ def download_images_for_hrm(conn, script_params):
                             project_name = "None"
                         else:
                             project_name = "{}_{}".format(project.getId(), project.getName())
-                        n_image_tmp, n_dataset_tmp = process_dataset(conn, omero_object, project_name, owner_root,
-                                                                     download_existing_images)
+                        n_image_tmp, n_dataset_tmp, tot_image_tmp = process_dataset(conn, omero_object, project_name,
+                                                                                    owner_root,
+                                                                                    download_existing_images)
+
                         n_dataset += n_dataset_tmp
                         n_image += n_image_tmp
+                        tot_dataset += 1
+                        tot_image += tot_image_tmp
 
                     if object_type == 'Project':
-                        n_image_tmp, n_dataset_tmp, n_project_tmp = process_project(conn, omero_object, owner_root,
-                                                                                    download_existing_images)
+                        n_image_tmp, n_dataset_tmp, n_project_tmp, tot_image_tmp, tot_dataset_tmp = process_project(
+                            conn, omero_object, owner_root,
+                            download_existing_images)
+
                         n_image += n_image_tmp
                         n_dataset += n_dataset_tmp
                         n_project += n_project_tmp
+                        tot_project += 1
+                        tot_dataset += tot_dataset_tmp
+                        tot_image += tot_image_tmp
                 else:
                     print(object_type, object_id, "does not exist or you do not have access to it")
 
             # build summary message    
             if not user_name == "":
-                message = "Downloaded {} image(s), {} dataset(s), {} project(s) from {}".format(n_image, n_dataset,
-                                                                                                n_project, user_name)
+                message = "Downloaded {}/{} image(s), {}/{} dataset(s), {}/{} project(s) from {}".format(n_image, tot_image,
+                                                                                                         n_dataset, tot_dataset,
+                                                                                                         n_project, tot_project,
+                                                                                                         user_name)
             else:
                 message = "Cannot download objects"
             print(message)

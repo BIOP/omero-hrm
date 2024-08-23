@@ -17,13 +17,13 @@
 ------------------------------------------------------------------------------
 Created by Rémy Dornier
 """
-
+import omero
 from omero.gateway import BlitzGateway
 import omero.scripts as scripts
 import os
 import sys
 from omero.rtypes import rstring
-from omero_model_OriginalFileI import OriginalFileI
+from omero.plugins.download import DownloadControl
 
 
 DATA_TYPE_PARAM_NAME = "Data_Type"
@@ -49,50 +49,57 @@ def download_image(conn, target_obj, path, download_existing_images):
     return downloading status
 
     Method partially taken from https://github.com/imcf/hrm-omero
-    and https://github.com/ome/omero-py/blob/master/src/omero/plugins/download.py
+    and https://gist.github.com/will-moore/a9f90c97b5b6f1a0da277a5179d62c5a
     """
     # Download the files composing the image
     fset = target_obj.getFileset()
+    fset_id = fset.getId()
 
     if not fset:
-        print("ERROR", f"ERROR: no original file(s) for [{target_obj.getId()}] found!")
+        print("ERROR", f"ERROR: no original file(s) for [%s] found!" % target_obj.getId())
         return False
 
-    if fset.getId() in downloaded_fileset:
-        print(f"Image part of the same fileset "+str(fset.getId())+"! Skipping...")
+    if fset_id in downloaded_fileset:
+        print("WARNING", f"Image part of the same fileset %s! Skipping..." % fset_id)
         return True
 
     # mimic the Java gateway download by adding a fileset folder
-    path = os.path.join(path, "Fileset_"+str(fset.getId()))
+    path = os.path.join(path, "Fileset_%s" % fset.getId())
 
-    # loop over the files within fileset and resolve its hierarchy
-    template_prefix = fset.getTemplatePrefix()
-    for orig_file in fset.listFiles():
-        file_path = orig_file.getPath().replace(template_prefix, "")
-        file_name = orig_file.getName()
-        file_id = orig_file.getId()
+    if download_existing_images and os.path.exists(path) and len(os.listdir(path)) > 0:
+        delete_previous_fileset(path)
 
-        target_dir = os.path.join(path, file_path)
-        os.makedirs(target_dir, exist_ok=True)
-        target_path = os.path.join(target_dir, file_name)
+    dc = DownloadControl()
+    downloaded = False
+    try:
+        dc.download_fileset(conn, fset, path)
+        downloaded = True
+        print("SUCCESS", f"downloading fileset %s to '%s' done !" % (fset_id, path))
+    except omero.ValidationException or omero.ResourceError as err:
+        print("ERROR", f"ERROR: downloading fileset %s to '%s' failed: \n %s" % (fset_id, path, err.message))
+    except Exception as err:
+        print("ERROR", f"ERROR: downloading fileset %s to '%s' failed: \n %s" % (fset_id, path, err))
 
-        # download the file
-        try:
-            if target_path == "-":
-                conn.c.download(orig_file, filehandle=StdOutHandle())
-            else:
-                if os.path.exists(target_path) and not download_existing_images:
-                    print(f"File exists! Skipping...")
-                else:
-                    print(f"Downloading original file [{file_id}] to [{target_path}]...")
-                    conn.c.download(OriginalFileI(file_id), target_path)
-                    downloaded_fileset.append(fset.getId())
-        except Exception as err:  # pylint: disable-msg=broad-except
-            print("ERROR", f"ERROR: downloading {file_id} to '{target_path}' failed: {err}")
-            return False
-        print("SUCCESS", f"ID {file_id} downloaded as '{os.path.basename(target_path)}'")
+    downloaded_fileset.append(fset.getId())
+    return downloaded
 
-    return True
+
+def delete_previous_fileset(fileset_path):
+    """Delete image in the raw folder
+    ----------
+    fileset_path : str
+        Path to image to delete.
+    """
+    for path in os.listdir(fileset_path):
+        # check if current path is a file
+        file = os.path.join(fileset_path, path)
+        if os.path.isfile(file):
+            print("INFO", f"Delete file [%s]" % file)
+            os.remove(file)
+        else:
+            delete_previous_fileset(file)
+            print("INFO", f"Delete folder [%s]" % file)
+            os.rmdir(file)
 
 
 def build_path(root, project_name, dataset_name):
@@ -193,7 +200,7 @@ def download_images_for_hrm(conn, script_params):
     # enter its corresponding ID (except for 'user' : enter the username)
     object_id_list = script_params[ID_PARAM_NAME]
     # root HRM path
-    root = "/mnt/hrmshare"  # script_params["HRM_path"]
+    root = "/mnt"#/hrmshare"  # script_params["HRM_path"]
     # boolean to overwrite
     download_existing_images = script_params[OVERWRITE_PARAM_NAME]
 

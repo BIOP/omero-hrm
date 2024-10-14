@@ -783,34 +783,38 @@ def list_images_to_upload(conn, owner, root):
 
                     dataset = conn.getObject('Dataset', dataset_id)
                     if dataset is not None:
-                        for image_name in os.listdir(dataset_folder):
-                            # filter only ids images
-                            if ".ids" in image_name:  # .ids
-                                already_existing_image = False
-                                n_initial_images += 1
-                                dataset_images = dataset.listChildren()
+                        for fileset_name in os.listdir(dataset_folder):
+                            fileset_folder = os.path.join(dataset_folder, fileset_name)
+                            for image_name in os.listdir(fileset_folder):
+                                # filter only ids images
+                                if ".ids" in image_name:  # .ids
+                                    already_existing_image = False
+                                    n_initial_images += 1
+                                    dataset_images = dataset.listChildren()
 
-                                # filter image that does not already exist in omero
-                                for ex_image in dataset_images:
-                                    if ex_image.getName() == image_name:
-                                        already_existing_image = True
-                                        break
+                                    # filter image that does not already exist in omero
+                                    for ex_image in dataset_images:
+                                        if ex_image.getName() == image_name:
+                                            already_existing_image = True
+                                            break
 
-                                if not already_existing_image:
-                                    image_path_dataset_id_map[os.path.join(dataset_folder, image_name)] = dataset_id
+                                    if not already_existing_image:
+                                        image_path_dataset_id_map[os.path.join(fileset_folder, image_name)] = dataset_id
                 # orphaned images
                 else:
                     dataset_created = False
                     orphaned_dataset_id = -1
-                    for image_name in os.listdir(dataset_folder):
-                        # filter only ids images
-                        if ".ids" in image_name:  # .ids
-                            n_initial_images += 1
-                            # create a new for orphaned images 
-                            if not dataset_created:
-                                orphaned_dataset_id = create_dataset(conn, f"HRM-{date.today()}")
-                                dataset_created = True
-                            image_path_dataset_id_map[os.path.join(dataset_folder, image_name)] = orphaned_dataset_id
+                    for fileset_name in os.listdir(dataset_folder):
+                        fileset_folder = os.path.join(dataset_folder, fileset_name)
+                        for image_name in os.listdir(fileset_folder):
+                            # filter only ids images
+                            if ".ids" in image_name:  # .ids
+                                n_initial_images += 1
+                                # create a new for orphaned images
+                                if not dataset_created:
+                                    orphaned_dataset_id = create_dataset(conn, f"HRM-{date.today()}")
+                                    dataset_created = True
+                                image_path_dataset_id_map[os.path.join(fileset_folder, image_name)] = orphaned_dataset_id
 
         return image_path_dataset_id_map, None, n_initial_images
     else:

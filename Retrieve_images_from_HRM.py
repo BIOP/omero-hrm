@@ -776,7 +776,7 @@ def list_images_to_upload(conn, owner, root):
                 if not os.path.isdir(dataset_folder):
                     return None, dataset_folder, -1
 
-                # images within a dsataset
+                # images within a dataset
                 if not dataset_name == "None":
                     d_name_split = dataset_name.split("_")
                     dataset_id = d_name_split[0]
@@ -784,6 +784,11 @@ def list_images_to_upload(conn, owner, root):
                     dataset = conn.getObject('Dataset', dataset_id)
                     if dataset is not None:
                         for fileset_name in os.listdir(dataset_folder):
+
+                            # filter any .DS_store, .git and Thumbs.db
+                            if fileset_name.startswith(".") or fileset_name.endswith("Thumbs.db"):
+                                continue
+
                             fileset_folder = os.path.join(dataset_folder, fileset_name)
                             for image_name in os.listdir(fileset_folder):
                                 # filter only ids images
@@ -805,6 +810,11 @@ def list_images_to_upload(conn, owner, root):
                     dataset_created = False
                     orphaned_dataset_id = -1
                     for fileset_name in os.listdir(dataset_folder):
+
+                        # filter any .DS_store, .git and Thumbs.db
+                        if fileset_name.startswith(".") or fileset_name.endswith("Thumbs.db"):
+                            continue
+
                         fileset_folder = os.path.join(dataset_folder, fileset_name)
                         for image_name in os.listdir(fileset_folder):
                             # filter only ids images
